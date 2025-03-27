@@ -52,7 +52,7 @@ pub const Entry = packed struct {
     }
 };
 
-pub const Tss = packed struct {
+pub const Tss = extern struct {
     prev_tss: u16,
     reserved1: u16,
     esp0: u32,
