@@ -4,7 +4,12 @@ const io = @import("../io.zig");
 
 export var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Multiboot.Header.init(.{});
 
-var stack_bytes: [16 * 1024]u8 align(16) linksection(".bss") = undefined;
+var stack_bytes: [64 * 1024]u8 align(16) linksection(".bss") = undefined;
+
+const com1 = io.SerialConsole{
+    .baud = io.SerialConsole.DEFAULT_BAUDRATE,
+    .port = .COM1,
+};
 
 export fn _start() callconv(.Naked) noreturn {
     asm volatile (
@@ -18,14 +23,11 @@ export fn _start() callconv(.Naked) noreturn {
 }
 
 fn _start_bootstrap() callconv(.C) void {
-    //arch.bootstrap();
+    arch.bootstrap();
 
-    var com1 = io.SerialConsole{
-        .port = .COM1,
-    };
     com1.reset() catch unreachable;
-
-    com1.writer().print("{}\n", .{com1}) catch unreachable;
+    _ = com1.write("Hello, world\n") catch unreachable;
+    _ = com1.writer().print("{}", .{1}) catch unreachable;
 
     while (true) {}
 }
