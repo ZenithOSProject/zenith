@@ -31,15 +31,7 @@ pub const Entry = packed struct {
         return .{
             .limit_low = @truncate(limit),
             .base_low = @truncate(base),
-            .access = .{
-                .accessed = access.accessed,
-                .read_write = access.read_write,
-                .direction_conforming = access.direction_conforming,
-                .executable = access.executable,
-                .descriptor = access.descriptor,
-                .privilege = access.privilege,
-                .present = access.present,
-            },
+            .access = access,
             .limit_high = @truncate(limit >> 16),
             .flags = .{
                 .reserved = flags.reserved,
