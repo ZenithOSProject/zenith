@@ -1,3 +1,4 @@
+const std = @import("std");
 const Multiboot = @import("../../../boot/Multiboot.zig");
 const arch = @import("../../x86.zig");
 const io = @import("../io.zig");
@@ -29,6 +30,15 @@ fn _start_bootstrap() callconv(.C) void {
     _ = com1.write("Hello, world\n") catch unreachable;
     _ = com1.writer().print("{}", .{1}) catch unreachable;
 
+    while (true) {}
+}
+
+pub const panic = std.debug.FullPanic(panicFunc);
+
+fn panicFunc(msg: []const u8, first_trace_addr: ?usize) noreturn {
+    _ = first_trace_addr;
+
+    _ = com1.write(msg) catch unreachable;
     while (true) {}
 }
 

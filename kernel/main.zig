@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const std = @import("std");
 const options = @import("options");
 
 pub const arch = @field(@import("arch.zig"), @tagName(builtin.target.cpu.arch));
@@ -8,5 +9,7 @@ comptime {
     _ = arch;
     _ = platform;
 }
+
+pub const panic = if (@hasDecl(platform, "panic")) platform.panic else std.debug.FullPanic(std.debug.defaultPanic);
 
 pub fn main() void {}
