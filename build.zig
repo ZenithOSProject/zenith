@@ -11,6 +11,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     const platform = standardPlatformOption(b, target);
+    const use_llvm = b.option(bool, "use-llvm", "Use LLVM or Zig's built in codegen");
 
     const options = b.addOptions();
     options.addOption([]const u8, "platform", platform);
@@ -18,6 +19,7 @@ pub fn build(b: *std.Build) void {
     const kernel_exec = b.addExecutable(.{
         .name = "zenith",
         .linkage = .static,
+        .use_llvm = use_llvm,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
@@ -41,6 +43,8 @@ pub fn build(b: *std.Build) void {
             platform,
             "linker.ld",
         })));
+
+        kernel_exec.link_gc_sections = false;
     }
 
     b.installArtifact(kernel_exec);
