@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .root_source_file = b.path("kernel/main.zig"),
-            .code_model = if (target.result.os.tag == .freestanding) .kernel else .default,
+            .code_model = if (target.result.os.tag == .freestanding and target.result.cpu.arch.isX86()) .kernel else .default,
             .imports = &.{
                 .{
                     .name = "options",
