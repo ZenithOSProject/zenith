@@ -18,12 +18,15 @@ export fn _start() callconv(.Naked) noreturn {
 }
 
 fn _start_bootstrap() callconv(.C) void {
-    arch.bootstrap();
+    //arch.bootstrap();
 
-    var vga_console = io.VgaConsole{};
-    vga_console.reset();
+    var com1 = io.SerialConsole{
+        .port = .COM1,
+    };
+    com1.reset() catch unreachable;
 
-    vga_console.puts("Hello");
+    com1.writer().print("{}\n", .{com1}) catch unreachable;
+
     while (true) {}
 }
 
