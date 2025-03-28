@@ -15,9 +15,16 @@ export fn _start() callconv(.Naked) noreturn {
 }
 
 fn _start_bootstrap() callconv(.C) void {
+    const el1: u64 = 0b11 << 20;
+    asm volatile (
+        \\msr cpacr_el1, %[el1]
+        :
+        : [el1] "r" (el1),
+    );
+
     var serial = io.SerialConsole{};
     _ = serial.write("Hello, world\n") catch unreachable;
-    _ = serial.writer().writeInt(u8, 128, .little) catch unreachable;
+    _ = serial.writer().print("{}\n", .{serial}) catch unreachable;
     while (true) {}
 }
 
