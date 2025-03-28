@@ -70,7 +70,7 @@ fn pageFault(state: *cpu.State) u32 {
         : [cr4] "=r" (-> u32),
     );
 
-    std.debug.panic("Page fault! State: {}, CR0: 0x{x}, CR2: 0x{x}, CR3: 0x{x}, CR4: 0x{x}", .{ state, cr0, cr2, cr3, cr4 });
+    std.debug.panicExtra(state.eip, "Page fault! State: {}, CR0: 0x{x}, CR2: 0x{x}, CR3: 0x{x}, CR4: 0x{x}", .{ state, cr0, cr2, cr3, cr4 });
 }
 
 pub fn init(_: *const mem.Profile) void {

@@ -111,6 +111,8 @@ fn _start_bootstrap() callconv(.C) void {
 
     Multiboot.info = @ptrFromInt(mb_info_addr);
 
+    std.log.info("{}", .{Multiboot.info.?});
+
     const mmap_addr = Multiboot.info.?.mmap_addr;
     const num_mmap_entries = Multiboot.info.?.mmap_len / @sizeOf(Multiboot.MemoryMap);
     const mem_map = @as([*]Multiboot.MemoryMap, @ptrFromInt(mmap_addr))[0..num_mmap_entries];
@@ -144,6 +146,9 @@ fn _start_bootstrap() callconv(.C) void {
     _ = console.writer().print("{}\n", .{mem_profile}) catch unreachable;
 
     @import("root").main();
+
+    @breakpoint();
+    while (true) @trap();
 }
 
 pub const panic = std.debug.FullPanic(panicFunc);
@@ -181,6 +186,27 @@ pub fn logFn(
     var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
 
     _ = console.writer().print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
+}
+
+pub fn initMem(
+    reserved_physical_mem: *std.ArrayList(mem.Range),
+    reserved_virtual_mem: *std.ArrayList(mem.Map),
+) !void {
+    _ = reserved_physical_mem;
+
+    const vga_console_addr = mem.virtToPhys(@as(usize, @intFromPtr(vga_console.buffer().ptr)));
+    const vga_console_region = mem.Range{
+        .start = vga_console_addr,
+        .end = vga_console_addr + 32 * 1024,
+    };
+
+    try reserved_virtual_mem.append(.{
+        .physical = vga_console_region,
+        .virtual = .{
+            .start = mem.physToVirt(vga_console_region.start),
+            .end = mem.physToVirt(vga_console_region.end),
+        },
+    });
 }
 
 comptime {

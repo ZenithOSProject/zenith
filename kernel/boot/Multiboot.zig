@@ -1,17 +1,25 @@
 const std = @import("std");
+const arch = @import("../main.zig").arch;
+const platform = @import("../main.zig").platform;
 const mem = @import("../mem.zig");
+
+pub const uint8_t = u8;
+pub const uint16_t = c_ushort;
+pub const uint32_t = c_uint;
+pub const int32_t = c_int;
+pub const uint64_t = c_ulonglong;
 
 pub const magic: i32 = 0x1BADB002;
 
 pub const Header = extern struct {
-    magic: i32 = MAGIC,
-    flags: i32,
-    checksum: i32,
+    magic: uint32_t = MAGIC,
+    flags: uint32_t,
+    checksum: int32_t,
 
-    pub fn init(flags: i32) Header {
+    pub fn init(flags: uint32_t) Header {
         return .{
             .flags = flags,
-            .checksum = -(MAGIC + flags),
+            .checksum = -(@as(int32_t, @intCast(MAGIC)) + @as(int32_t, @intCast(flags))),
         };
     }
 
@@ -23,48 +31,48 @@ pub const Header = extern struct {
 };
 
 pub const Info = extern struct {
-    flags: u32,
-    mem_lower: u32,
-    mem_upper: u32,
-    boot_device: u32,
-    cmdline: u32,
-    mods_count: u32,
-    mods_addr: u32,
+    flags: uint32_t,
+    mem_lower: uint32_t,
+    mem_upper: uint32_t,
+    boot_device: uint32_t,
+    cmdline: uint32_t,
+    mods_count: uint32_t,
+    mods_addr: uint32_t,
     binary: extern union {
         aout: extern struct {
-            tabsize: u32,
-            strsize: u32,
-            addr: u32,
-            reserved: u32,
+            tabsize: uint32_t,
+            strsize: uint32_t,
+            addr: uint32_t,
+            reserved: uint32_t,
         },
         elf: extern struct {
-            num: u32,
-            size: u32,
-            addr: u32,
-            shndx: u32,
+            num: uint32_t,
+            size: uint32_t,
+            addr: uint32_t,
+            shndx: uint32_t,
         },
     },
-    mmap_len: u32,
-    mmap_addr: u32,
-    drives_len: u32,
-    drives_addr: u32,
-    cfgtbl: u32,
-    bootloader_name: u32,
-    apm_table: u32,
+    mmap_len: uint32_t,
+    mmap_addr: uint32_t,
+    drives_len: uint32_t,
+    drives_addr: uint32_t,
+    cfgtbl: uint32_t,
+    bootloader_name: uint32_t,
+    apm_table: uint32_t,
 };
 
 pub const MemoryMap = packed struct {
-    size: u32,
-    addr: u64,
-    len: u64,
-    type: u32,
+    size: uint32_t,
+    addr: uint64_t,
+    len: uint64_t,
+    type: uint32_t,
 };
 
 pub const ModuleList = packed struct {
-    mod_start: u32,
-    mod_end: u32,
-    cmdline: u32,
-    pad: u32,
+    mod_start: uint32_t,
+    mod_end: uint32_t,
+    cmdline: uint32_t,
+    pad: uint32_t,
 };
 
 pub var info: ?*const Info = null;
@@ -85,11 +93,12 @@ pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.
 
     for (mem_map) |entry| {
         if (entry.type != 1 and entry.len < std.math.maxInt(usize)) {
-            const end: usize = if (entry.addr > std.math.maxInt(usize) - entry.len) std.math.maxInt(usize) else @truncate(entry.addr + entry.len);
-            try reserved_physical_mem.append(.{
-                .start = @truncate(entry.addr),
-                .end = end,
-            });
+            //FIXME: getting all the wrong values
+            //const end: usize = if (entry.addr > std.math.maxInt(usize) - entry.len) std.math.maxInt(usize) else @truncate(entry.addr + entry.len);
+            //try reserved_physical_mem.append(.{
+            //    .start = @truncate(entry.addr),
+            //    .end = end,
+            //});
         }
     }
 
@@ -131,6 +140,14 @@ pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.
             .physical = physical,
             .virtual = virtual,
         });
+    }
+
+    if (@hasDecl(arch, "initMem")) {
+        try arch.initMem(&reserved_physical_mem, &reserved_virtual_mem);
+    }
+
+    if (@hasDecl(platform, "initMem")) {
+        try platform.initMem(&reserved_physical_mem, &reserved_virtual_mem);
     }
 
     return mem.Profile{
