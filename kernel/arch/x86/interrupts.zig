@@ -4,7 +4,7 @@ const Irq = @import("Irq.zig");
 const Gdt = @import("Gdt.zig");
 const isr = @import("isr.zig");
 
-fn handler(state: *Cpu.State) usize {
+fn handler(state: *Cpu.State) callconv(.C) usize {
     if (state.int_num < Irq.OFFSET) {
         return isr.handler(state);
     } else {

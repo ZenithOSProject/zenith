@@ -1,5 +1,8 @@
 const std = @import("std");
 
+pub const phys = @import("mem/phys.zig");
+pub const virt = @import("mem/virt.zig");
+
 pub const Module = struct {
     region: Range,
     name: []const u8,

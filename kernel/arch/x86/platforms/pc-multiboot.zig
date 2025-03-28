@@ -20,6 +20,7 @@ const com1 = io.SerialConsole{
 };
 
 var vga_console = io.VgaConsole.init();
+var mem_profile: mem.Profile = undefined;
 
 const KERNEL_PAGE_NUMBER = 0xC0000000 >> 22;
 const KERNEL_NUM_PAGES = 1;
@@ -110,12 +111,17 @@ fn _start_bootstrap() callconv(.C) void {
 
     Multiboot.info = @ptrFromInt(mb_info_addr);
 
-    const profile = Multiboot.initMem(kernel_panic_allocator, kmem_virt, .{
+    mem_profile = Multiboot.initMem(kernel_panic_allocator, kmem_virt, .{
         .start = mem.virtToPhys(kmem_virt.start),
         .end = mem.virtToPhys(kmem_virt.end),
     }) catch |err| std.debug.panic("Failed to initialize memory from multiboot: {s}", .{@errorName(err)});
 
-    paging.init(&profile);
+    mem.phys.init(&mem_profile, kernel_panic_allocator);
+    _ = mem.virt.init(&mem_profile, kernel_panic_allocator) catch |err| {
+        const addr = if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress();
+        std.debug.panicExtra(addr, "Failed to initialize virt-mmu: {s}", .{@errorName(err)});
+    };
+    paging.init(&mem_profile);
 
     vga_console.reset();
     com1.reset() catch unreachable;
@@ -123,14 +129,14 @@ fn _start_bootstrap() callconv(.C) void {
     var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
 
     _ = console.write("Hello, world\n") catch unreachable;
-    _ = console.writer().print("{}\n", .{profile}) catch unreachable;
+    _ = console.writer().print("{}\n", .{mem_profile}) catch unreachable;
 
     @import("root").main();
 }
 
 pub const panic = std.debug.FullPanic(panicFunc);
 
-var kernel_panic_allocator_bytes: [100 * 1024]u8 = undefined;
+var kernel_panic_allocator_bytes: [1024 * 1024]u8 = undefined;
 var kernel_panic_allocator_state = std.heap.FixedBufferAllocator.init(kernel_panic_allocator_bytes[0..]);
 const kernel_panic_allocator = kernel_panic_allocator_state.allocator();
 
@@ -149,6 +155,20 @@ fn panicFunc(msg: []const u8, first_trace_addr: ?usize) noreturn {
     }
 
     while (true) {}
+}
+
+pub fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const level_txt = comptime message_level.asText();
+    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+
+    var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
+
+    _ = console.writer().print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
 }
 
 comptime {

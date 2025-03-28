@@ -89,6 +89,10 @@ pub fn writeByte(self: *VgaConsole, ch: u8) error{IncompatibleColor}!void {
             if (self.y == 25) {
                 self.y = 0;
             }
+
+            const start = self.y * 80 + self.x;
+            const end = self.y * 80 + (25 - self.x);
+            @memset(self.buffer()[start..end], entry(' ', color(self.bg, self.fg) catch unreachable));
         }
 
         moveCursor(80, self.x, self.y);

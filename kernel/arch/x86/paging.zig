@@ -76,7 +76,9 @@ pub fn init(_: *const mem.Profile) void {
     isr.set(14, pageFault) catch |e| std.debug.panic("Failed to set ISR: {s}", .{@errorName(e)});
 
     const dir_physaddr = @intFromPtr(mem.virtToPhys(&kernel_directory));
-    asm volatile ("mov %[addr], %%cr3"
+    asm volatile (
+        \\cli
+        \\mov %[addr], %%cr3
         :
         : [addr] "{eax}" (dir_physaddr),
     );

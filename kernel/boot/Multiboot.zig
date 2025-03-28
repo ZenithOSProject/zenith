@@ -93,6 +93,11 @@ pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.
         }
     }
 
+    try reserved_virtual_mem.append(.{
+        .virtual = vaddr,
+        .physical = paddr,
+    });
+
     const mb_region = mem.Range{
         .start = @intFromPtr(info.?),
         .end = @intFromPtr(info.?) + @sizeOf(Info),
