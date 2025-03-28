@@ -17,8 +17,6 @@ const Allocation = struct {
     physical: std.ArrayList(usize),
 };
 
-pub const BLOCK_SIZE: usize = phys.BLOCK_SIZE;
-
 pub const MapperError = error{
     InvalidVirtualAddress,
     InvalidPhysicalAddress,
@@ -61,7 +59,7 @@ pub fn Manager(comptime Payload: type) type {
 
         pub fn init(start: usize, end: usize, allocator: Allocator, mapper: Mapper(Payload), payload: Payload) Allocator.Error!Self {
             const size = end - start;
-            const bmp = try Bitmap(null, usize).init(std.mem.alignForward(usize, size, phys.BLOCK_SIZE) / phys.BLOCK_SIZE, allocator);
+            const bmp = try Bitmap(null, usize).init(std.mem.alignForward(usize, size, std.heap.pageSize()) / std.heap.pageSize(), allocator);
             return Self{
                 .bmp = bmp,
                 .start = start,
@@ -107,9 +105,9 @@ pub fn Manager(comptime Payload: type) type {
                 const vaddr = entry.key_ptr.*;
 
                 const allocation = entry.value_ptr.*;
-                if (vaddr <= v and vaddr + (allocation.physical.items.len * BLOCK_SIZE) > v) {
-                    const block_number = (v - vaddr) / BLOCK_SIZE;
-                    const block_offset = (v - vaddr) % BLOCK_SIZE;
+                if (vaddr <= v and vaddr + (allocation.physical.items.len * std.heap.pageSize()) > v) {
+                    const block_number = (v - vaddr) / std.heap.pageSize();
+                    const block_offset = (v - vaddr) % std.heap.pageSize();
                     return allocation.physical.items[block_number] + block_offset;
                 }
             }
@@ -123,9 +121,9 @@ pub fn Manager(comptime Payload: type) type {
                 const allocation = entry.value_ptr.*;
 
                 for (allocation.physical.items, 0..) |block, i| {
-                    if (block <= p and block + BLOCK_SIZE > p) {
-                        const block_addr = vaddr + i * BLOCK_SIZE;
-                        const block_offset = p % BLOCK_SIZE;
+                    if (block <= p and block + std.heap.pageSize() > p) {
+                        const block_addr = vaddr + i * std.heap.pageSize();
+                        const block_offset = p % std.heap.pageSize();
                         return block_addr + block_offset;
                     }
                 }
@@ -137,12 +135,12 @@ pub fn Manager(comptime Payload: type) type {
             if (v < self.start) {
                 return error.OutOfBounds;
             }
-            return self.bmp.isSet((v - self.start) / BLOCK_SIZE);
+            return self.bmp.isSet((v - self.start) / std.heap.pageSize());
         }
 
         pub fn set(self: *Self, virtual: mem.Range, physical: ?mem.Range, attrs: Attributes) (Error || Allocator.Error || MapperError || error{OutOfBounds})!void {
             var virt = virtual.start;
-            while (virt < virtual.end) : (virt += BLOCK_SIZE) {
+            while (virt < virtual.end) : (virt += std.heap.pageSize()) {
                 if (try self.isSet(virt)) {
                     return Error.AlreadyAllocated;
                 }
@@ -159,7 +157,7 @@ pub fn Manager(comptime Payload: type) type {
                     return Error.InvalidPhysAddresses;
                 }
                 var phys2 = p.start;
-                while (phys2 < p.end) : (phys2 += BLOCK_SIZE) {
+                while (phys2 < p.end) : (phys2 += std.heap.pageSize()) {
                     if (try phys.isSet(phys2)) {
                         return Error.PhysicalAlreadyAllocated;
                     }
@@ -169,13 +167,13 @@ pub fn Manager(comptime Payload: type) type {
             var phys_list = std.ArrayList(usize).init(self.allocator);
 
             virt = virtual.start;
-            while (virt < virtual.end) : (virt += BLOCK_SIZE) {
-                try self.bmp.setEntry((virt - self.start) / BLOCK_SIZE);
+            while (virt < virtual.end) : (virt += std.heap.pageSize()) {
+                try self.bmp.setEntry((virt - self.start) / std.heap.pageSize());
             }
 
             if (physical) |p| {
                 var phys2 = p.start;
-                while (phys2 < p.end) : (phys2 += BLOCK_SIZE) {
+                while (phys2 < p.end) : (phys2 += std.heap.pageSize()) {
                     try phys.setAddr(phys2);
                     try phys_list.append(phys2);
                 }
@@ -191,18 +189,29 @@ pub fn Manager(comptime Payload: type) type {
         pub fn alloc(self: *Self, num: usize, virtual_addr: ?usize, attrs: Attributes) Allocator.Error!?usize {
             if (num == 0) return null;
             if (phys.blocksFree() >= num and self.bmp.free_count >= num) {
-                if (self.bmp.setContiguous(num, if (virtual_addr) |a| (a - self.start) / BLOCK_SIZE else null)) |entry| {
+                if (self.bmp.setContiguous(num, if (virtual_addr) |a| (a - self.start) / std.heap.pageSize() else null)) |entry| {
                     var block_list = std.ArrayList(usize).init(self.allocator);
                     try block_list.ensureUnusedCapacity(num);
 
                     var i: usize = 0;
-                    const vaddr_start = self.start + entry * BLOCK_SIZE;
+                    const vaddr_start = self.start + entry * std.heap.pageSize();
                     var vaddr = vaddr_start;
                     while (i < num) : (i += 1) {
                         const addr = phys.alloc() orelse unreachable;
                         try block_list.append(addr);
-                        self.mapper.mapFn(vaddr, vaddr + BLOCK_SIZE, addr, addr + BLOCK_SIZE, attrs, self.allocator, self.payload) catch |e| std.debug.panic("Failed to map virtual memory: 0x{x}: {s}\n", .{ vaddr, @errorName(e) });
-                        vaddr += BLOCK_SIZE;
+                        self.mapper.mapFn(
+                            vaddr,
+                            vaddr + std.heap.pageSize(),
+                            addr,
+                            addr + std.heap.pageSize(),
+                            attrs,
+                            self.allocator,
+                            self.payload,
+                        ) catch |e| std.debug.panic("Failed to map virtual memory: 0x{x}: {s}\n", .{
+                            vaddr,
+                            @errorName(e),
+                        });
+                        vaddr += std.heap.pageSize();
                     }
                     _ = try self.allocations.put(vaddr_start, Allocation{ .physical = block_list });
                     return vaddr_start;
@@ -211,12 +220,18 @@ pub fn Manager(comptime Payload: type) type {
             return null;
         }
 
-        pub fn copyData(self: *Self, other: *const Self, comptime from: bool, data: if (from) []const u8 else []u8, address: usize) (error{OutOfBounds} || Error || Allocator.Error)!void {
+        pub fn copyData(
+            self: *Self,
+            other: *const Self,
+            comptime from: bool,
+            data: if (from) []const u8 else []u8,
+            address: usize,
+        ) (error{OutOfBounds} || Error || Allocator.Error)!void {
             if (data.len == 0) {
                 return;
             }
-            const start_addr = std.mem.alignBackward(address, BLOCK_SIZE);
-            const end_addr = std.mem.alignForward(address + data.len, BLOCK_SIZE);
+            const start_addr = std.mem.alignBackward(address, std.heap.pageSize());
+            const end_addr = std.mem.alignForward(address + data.len, std.heap.pageSize());
 
             if (end_addr >= other.end or start_addr < other.start) {
                 return error.OutOfBounds;
@@ -228,25 +243,29 @@ pub fn Manager(comptime Payload: type) type {
             while (it.next()) |allocation| {
                 const virtual = allocation.key_ptr.*;
                 const physical = allocation.value_ptr.*.physical.items;
-                if (start_addr >= virtual and virtual + physical.len * BLOCK_SIZE >= end_addr) {
-                    const first_block_idx = (start_addr - virtual) / BLOCK_SIZE;
-                    const last_block_idx = (end_addr - virtual) / BLOCK_SIZE;
+                if (start_addr >= virtual and virtual + physical.len * std.heap.pageSize() >= end_addr) {
+                    const first_block_idx = (start_addr - virtual) / std.heap.pageSize();
+                    const last_block_idx = (end_addr - virtual) / std.heap.pageSize();
 
                     try blocks.appendSlice(physical[first_block_idx..last_block_idx]);
                 }
             }
-            if (blocks.items.len != std.mem.alignForward(data.len, BLOCK_SIZE) / BLOCK_SIZE) {
+            if (blocks.items.len != std.mem.alignForward(data.len, std.heap.pageSize()) / std.heap.pageSize()) {
                 return Error.NotAllocated;
             }
 
             if (self.bmp.setContiguous(blocks.items.len, null)) |entry| {
-                const v_start = entry * BLOCK_SIZE + self.start;
+                const v_start = entry * std.heap.pageSize() + self.start;
                 for (blocks.items, 0..) |block, i| {
-                    const v = v_start + i * BLOCK_SIZE;
-                    const v_end = v + BLOCK_SIZE;
+                    const v = v_start + i * std.heap.pageSize();
+                    const v_end = v + std.heap.pageSize();
                     const p = block;
-                    const p_end = p + BLOCK_SIZE;
-                    self.mapper.mapFn(v, v_end, p, p_end, .{ .kernel = true, .writable = true, .cachable = false }, self.allocator, self.payload) catch |e| {
+                    const p_end = p + std.heap.pageSize();
+                    self.mapper.mapFn(v, v_end, p, p_end, .{
+                        .kernel = true,
+                        .writable = true,
+                        .cachable = false,
+                    }, self.allocator, self.payload) catch |e| {
                         if (i > 0) {
                             self.mapper.unmapFn(v_start, v_end, self.allocator, self.payload) catch |e2| std.debug.panic("Failed to unmap virtual region 0x{X} -> 0x{X}: {}\n", .{ v_start, v_end, e2 });
                         }
@@ -266,7 +285,7 @@ pub fn Manager(comptime Payload: type) type {
         }
 
         pub fn free(self: *Self, vaddr: usize) (error{OutOfBounds} || Error)!void {
-            const entry = (vaddr - self.start) / BLOCK_SIZE;
+            const entry = (vaddr - self.start) / std.heap.pageSize();
             if (try self.bmp.isSet(entry)) {
                 const allocation = self.allocations.get(vaddr).?;
                 const physical = allocation.physical;
@@ -274,12 +293,20 @@ pub fn Manager(comptime Payload: type) type {
                 const num_physical_allocations = physical.items.len;
                 for (physical.items, 0..) |block, i| {
                     try self.bmp.clearEntry(entry + i);
-                    phys.free(block) catch |e| std.debug.panic("Failed to free PMM reserved memory at 0x{X}: {}\n", .{ block * BLOCK_SIZE, e });
+                    phys.free(block) catch |e| std.debug.panic("Failed to free PMM reserved memory at 0x{X}: {}\n", .{
+                        block * std.heap.pageSize(),
+                        e,
+                    });
                 }
 
                 const region_start = vaddr;
-                const region_end = vaddr + (num_physical_allocations * BLOCK_SIZE);
-                self.mapper.unmapFn(region_start, region_end, self.allocator, self.payload) catch |e| std.debug.panic("Failed to unmap VMM reserved memory from 0x{X} to 0x{X}: {}\n", .{ region_start, region_end, e });
+                const region_end = vaddr + (num_physical_allocations * std.heap.pageSize());
+                self.mapper.unmapFn(
+                    region_start,
+                    region_end,
+                    self.allocator,
+                    self.payload,
+                ) catch |e| std.debug.panic("Failed to unmap VMM reserved memory from 0x{X} to 0x{X}: {}\n", .{ region_start, region_end, e });
                 assert(self.allocations.remove(vaddr));
             } else {
                 return Error.NotAllocated;
@@ -304,13 +331,13 @@ pub fn init(memprofile: *const mem.Profile, allocator: std.mem.Allocator) Alloca
 
     for (memprofile.virtual_reserved) |entry| {
         const virtual = mem.Range{
-            .start = std.mem.alignBackward(usize, entry.virtual.start, BLOCK_SIZE),
-            .end = std.mem.alignForward(usize, entry.virtual.end, BLOCK_SIZE),
+            .start = std.mem.alignBackward(usize, entry.virtual.start, std.heap.pageSize()),
+            .end = std.mem.alignForward(usize, entry.virtual.end, std.heap.pageSize()),
         };
         const physical: ?mem.Range = if (entry.physical) |p|
             mem.Range{
-                .start = std.mem.alignBackward(usize, p.start, BLOCK_SIZE),
-                .end = std.mem.alignForward(usize, p.end, BLOCK_SIZE),
+                .start = std.mem.alignBackward(usize, p.start, std.heap.pageSize()),
+                .end = std.mem.alignForward(usize, p.end, std.heap.pageSize()),
             }
         else
             null;

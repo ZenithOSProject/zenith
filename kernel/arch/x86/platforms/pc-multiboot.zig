@@ -195,6 +195,14 @@ pub fn initMem(
     });
 }
 
+pub fn queryPageSize() usize {
+    // TODO: support runtime page size
+    return paging.PAGE_SIZE_4KB;
+}
+
+pub const page_size_min = paging.PAGE_SIZE_4KB;
+pub const page_size_max = paging.PAGE_SIZE_4KB;
+
 comptime {
     _ = _start;
     _ = multiboot;

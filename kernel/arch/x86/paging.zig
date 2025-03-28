@@ -86,11 +86,11 @@ pub fn init(_: *const mem.Profile) void {
 }
 
 inline fn virtToDirEntryIdx(virt: usize) usize {
-    return virt / PAGE_SIZE_4MB;
+    return virt / (std.heap.pageSize() * 1024);
 }
 
 inline fn virtToTableEntryIdx(virt: usize) usize {
-    return (virt / PAGE_SIZE_4KB) % ENTRIES_PER_TABLE;
+    return (virt / std.heap.pageSize()) % ENTRIES_PER_TABLE;
 }
 
 inline fn setAttribute(val: *align(1) u32, attr: u32) void {
@@ -102,7 +102,7 @@ inline fn clearAttribute(val: *align(1) u32, attr: u32) void {
 }
 
 fn mapTableEntry(dir: *const Directory, entry: *align(1) TableEntry, virt_addr: usize, phys_addr: usize, attrs: mem.virt.Attributes) mem.virt.MapperError!void {
-    if (!std.mem.isAligned(phys_addr, PAGE_SIZE_4KB)) {
+    if (!std.mem.isAligned(phys_addr, std.heap.pageSize())) {
         return mem.virt.MapperError.MisalignedPhysicalAddress;
     }
     setAttribute(entry, TENTRY_PRESENT);
@@ -140,7 +140,7 @@ fn unmapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, _: Allocat
     const entry = virtToDirEntryIdx(virt_start);
     const table = dir.tables[entry] orelse return mem.virt.MapperError.NotMapped;
     var addr = virt_start;
-    while (addr < virt_end) : (addr += PAGE_SIZE_4KB) {
+    while (addr < virt_end) : (addr += std.heap.pageSize()) {
         const table_entry = &table.entries[virtToTableEntryIdx(addr)];
         if (table_entry.* & TENTRY_PRESENT != 0) {
             clearAttribute(table_entry, TENTRY_PRESENT);
@@ -167,10 +167,10 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
     if (phys_end - phys_start != virt_end - virt_start) {
         return mem.virt.MapperError.AddressMismatch;
     }
-    if (!std.mem.isAligned(phys_start, PAGE_SIZE_4KB) or !std.mem.isAligned(phys_end, PAGE_SIZE_4KB)) {
+    if (!std.mem.isAligned(phys_start, std.heap.pageSize()) or !std.mem.isAligned(phys_end, std.heap.pageSize())) {
         return mem.virt.MapperError.MisalignedPhysicalAddress;
     }
-    if (!std.mem.isAligned(virt_start, PAGE_SIZE_4KB) or !std.mem.isAligned(virt_end, PAGE_SIZE_4KB)) {
+    if (!std.mem.isAligned(virt_start, std.heap.pageSize()) or !std.mem.isAligned(virt_end, std.heap.pageSize())) {
         return mem.virt.MapperError.MisalignedVirtualAddress;
     }
 
@@ -181,7 +181,7 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
     if (dir.tables[entry]) |tbl| {
         table = tbl;
     } else {
-        table = &(try allocator.alignedAlloc(Table, @as(u29, @truncate(PAGE_SIZE_4KB)), 1))[0];
+        table = &(try allocator.alignedAlloc(Table, @as(u29, @truncate(std.heap.pageSize())), 1))[0];
         @memset(@as([*]u8, @ptrCast(table))[0..@sizeOf(Table)], 0);
         const table_phys_addr = mem.virt.kernel_vmm.virtToPhys(@intFromPtr(table)) catch |e| std.debug.panic("Failed getting the physical address for a page table: {}\n", .{e});
         dir_entry.* |= DENTRY_PAGE_ADDR & table_phys_addr;
@@ -214,51 +214,61 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
     var phys = phys_start;
     var tentry = virtToTableEntryIdx(virt);
     while (virt < virt_end) : ({
-        virt += PAGE_SIZE_4KB;
-        phys += PAGE_SIZE_4KB;
+        virt += std.heap.pageSize();
+        phys += std.heap.pageSize();
         tentry += 1;
     }) {
         try mapTableEntry(dir, &table.entries[tentry], virt, phys, attrs);
     }
 }
 
-pub fn map(virtual_start: usize, virtual_end: usize, phys_start: usize, phys_end: usize, attrs: mem.virt.Attributes, allocator: Allocator, dir: *Directory) (Allocator.Error || mem.virt.MapperError)!void {
+pub fn map(
+    virtual_start: usize,
+    virtual_end: usize,
+    phys_start: usize,
+    phys_end: usize,
+    attrs: mem.virt.Attributes,
+    allocator: Allocator,
+    dir: *Directory,
+) (Allocator.Error || mem.virt.MapperError)!void {
+    const page_size_mb = std.heap.pageSize() * 1024;
     var virt_addr = virtual_start;
     var phys_addr = phys_start;
-    var virt_next = @min(virtual_end, std.mem.alignBackward(usize, virt_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
-    var phys_next = @min(phys_end, std.mem.alignBackward(usize, phys_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
+    var virt_next = @min(virtual_end, std.mem.alignBackward(usize, virt_addr, page_size_mb) + page_size_mb);
+    var phys_next = @min(phys_end, std.mem.alignBackward(usize, phys_addr, page_size_mb) + page_size_mb);
     var entry_idx = virtToDirEntryIdx(virt_addr);
     while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virtual_end) : ({
         virt_addr = virt_next;
         phys_addr = phys_next;
-        virt_next = @min(virtual_end, virt_next + PAGE_SIZE_4MB);
-        phys_next = @min(phys_end, phys_next + PAGE_SIZE_4MB);
+        virt_next = @min(virtual_end, virt_next + page_size_mb);
+        phys_next = @min(phys_end, phys_next + page_size_mb);
         entry_idx += 1;
     }) {
         try mapDirEntry(dir, virt_addr, virt_next, phys_addr, phys_next, attrs, allocator);
     }
 
     log.info("Mapped {x} - {x} / {x} - {x} ({}) in {x}", .{
-       virtual_start,
-       virtual_end,
-       phys_start,
-       phys_end,
-       attrs,
-       @intFromPtr(dir),
+        virtual_start,
+        virtual_end,
+        phys_start,
+        phys_end,
+        attrs,
+        @intFromPtr(dir),
     });
 }
 
 pub fn unmap(virtual_start: usize, virtual_end: usize, allocator: Allocator, dir: *Directory) mem.virt.MapperError!void {
+    const page_size_mb = std.heap.pageSize() * 1024;
     var virt_addr = virtual_start;
-    var virt_next = @min(virtual_end, std.mem.alignBackward(usize, virt_addr, PAGE_SIZE_4MB) + PAGE_SIZE_4MB);
+    var virt_next = @min(virtual_end, std.mem.alignBackward(usize, virt_addr, page_size_mb) + page_size_mb);
     var entry_idx = virtToDirEntryIdx(virt_addr);
     while (entry_idx < ENTRIES_PER_DIRECTORY and virt_addr < virtual_end) : ({
         virt_addr = virt_next;
-        virt_next = @min(virtual_end, virt_next + PAGE_SIZE_4MB);
+        virt_next = @min(virtual_end, virt_next + page_size_mb);
         entry_idx += 1;
     }) {
         try unmapDirEntry(dir, virt_addr, virt_next, allocator);
-        if (std.mem.isAligned(virt_addr, PAGE_SIZE_4MB) and virt_next - virt_addr >= PAGE_SIZE_4MB) {
+        if (std.mem.isAligned(virt_addr, page_size_mb) and virt_next - virt_addr >= page_size_mb) {
             clearAttribute(&dir.entries[entry_idx], DENTRY_PRESENT);
 
             const table = dir.tables[entry_idx] orelse return mem.virt.MapperError.NotMapped;

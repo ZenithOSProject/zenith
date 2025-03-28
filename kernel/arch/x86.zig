@@ -11,7 +11,6 @@ pub const platforms = @import("x86/platforms.zig");
 
 pub const VmmPayload = *paging.Directory;
 pub const KERNEL_VMM_PAYLOAD = &paging.kernel_directory;
-pub const MEMORY_BLOCK_SIZE: usize = paging.PAGE_SIZE_4KB;
 pub const VMM_MAPPER = mem.virt.Mapper(VmmPayload){ .mapFn = paging.map, .unmapFn = paging.unmap };
 
 pub fn bootstrap() void {

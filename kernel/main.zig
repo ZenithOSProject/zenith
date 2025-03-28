@@ -14,6 +14,9 @@ pub const panic = if (@hasDecl(platform, "panic")) platform.panic else std.debug
 
 pub const std_options: std.Options = .{
     .logFn = if (@hasDecl(platform, "logFn")) platform.logFn else std.log.defaultLog,
+    .queryPageSize = if (@hasDecl(platform, "queryPageSize")) platform.queryPageSize else std.heap.defaultQueryPageSize,
+    .page_size_min = if (@hasDecl(platform, "page_size_min")) platform.page_size_min else null,
+    .page_size_max = if (@hasDecl(platform, "page_size_max")) platform.page_size_max else null,
 };
 
 pub fn main() void {}
