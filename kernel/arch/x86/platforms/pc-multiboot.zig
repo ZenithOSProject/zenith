@@ -111,20 +111,6 @@ fn _start_bootstrap() callconv(.C) void {
 
     Multiboot.info = @ptrFromInt(mb_info_addr);
 
-    std.log.info("{}", .{Multiboot.info.?});
-
-    const mmap_addr = Multiboot.info.?.mmap_addr;
-    const num_mmap_entries = Multiboot.info.?.mmap_len / @sizeOf(Multiboot.MemoryMap);
-    const mem_map = @as([*]Multiboot.MemoryMap, @ptrFromInt(mmap_addr))[0..num_mmap_entries];
-
-    for (mem_map) |entry| {
-        std.log.info("Memory map {} {x} - {x}", .{
-            entry.type,
-            entry.addr,
-            entry.addr + entry.len,
-        });
-    }
-
     mem_profile = Multiboot.initMem(kernel_panic_allocator, kmem_virt, .{
         .start = mem.virtToPhys(kmem_virt.start),
         .end = mem.virtToPhys(kmem_virt.end),
@@ -143,7 +129,7 @@ fn _start_bootstrap() callconv(.C) void {
     var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
 
     _ = console.write("Hello, world\n") catch unreachable;
-    _ = console.writer().print("{}\n", .{mem_profile}) catch unreachable;
+    _ = console.writer().print("RAM: {} bytes\n", .{mem_profile.mem_kb * 1024}) catch unreachable;
 
     @import("root").main();
 

@@ -78,8 +78,10 @@ pub fn reset(self: *VgaConsole) void {
 }
 
 pub fn putCharAt(self: *VgaConsole, x: usize, y: usize, ch: u8, cv: u8) void {
-    const i = y * 80 + x;
-    self.buffer()[i] = entry(ch, cv);
+    var buff = self.buffer();
+
+    const i = @min(buff.len - 1, y * 80 + x);
+    buff[i] = entry(ch, cv);
 }
 
 pub fn writeByte(self: *VgaConsole, ch: u8) error{IncompatibleColor}!void {

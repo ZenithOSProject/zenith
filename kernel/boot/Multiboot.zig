@@ -59,13 +59,42 @@ pub const Info = extern struct {
     cfgtbl: uint32_t,
     bootloader_name: uint32_t,
     apm_table: uint32_t,
+
+    pub fn mmapIterator(self: *const Info) MemoryMap.Iterator {
+        return .{
+            .addr = self.mmap_addr,
+            .end = self.mmap_len + self.mmap_addr,
+        };
+    }
 };
 
 pub const MemoryMap = packed struct {
     size: uint32_t,
     addr: uint64_t,
     len: uint64_t,
-    type: uint32_t,
+    type: Type,
+
+    pub const Type = enum(uint32_t) {
+        available = 1,
+        reserved = 2,
+        acpi_reclaim = 3,
+        nvs = 4,
+        badram = 5,
+    };
+
+    pub const Iterator = struct {
+        addr: usize,
+        end: usize,
+
+        pub fn next(self: *Iterator) ?*MemoryMap {
+            if (self.addr >= self.end) return null;
+
+            @setRuntimeSafety(false);
+            const entry: *MemoryMap = @as(*MemoryMap, @ptrFromInt(self.addr));
+            self.addr += entry.size + @sizeOf(uint32_t);
+            return entry;
+        }
+    };
 };
 
 pub const ModuleList = packed struct {
@@ -80,25 +109,22 @@ pub var info: ?*const Info = null;
 pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.Profile {
     std.debug.assert(info != null);
 
-    const mmap_addr = info.?.mmap_addr;
-    const num_mmap_entries = info.?.mmap_len / @sizeOf(MemoryMap);
-
     var reserved_physical_mem = std.ArrayList(mem.Range).init(gpa);
     defer reserved_physical_mem.deinit();
 
     var reserved_virtual_mem = std.ArrayList(mem.Map).init(gpa);
     defer reserved_virtual_mem.deinit();
 
-    const mem_map = @as([*]MemoryMap, @ptrFromInt(mmap_addr))[0..num_mmap_entries];
+    var mmap_iter = info.?.mmapIterator();
 
-    for (mem_map) |entry| {
-        if (entry.type != 1 and entry.len < std.math.maxInt(usize)) {
+    while (mmap_iter.next()) |entry| {
+        if (entry.type != .available and entry.len < std.math.maxInt(usize)) {
             //FIXME: getting all the wrong values
-            //const end: usize = if (entry.addr > std.math.maxInt(usize) - entry.len) std.math.maxInt(usize) else @truncate(entry.addr + entry.len);
-            //try reserved_physical_mem.append(.{
-            //    .start = @truncate(entry.addr),
-            //    .end = end,
-            //});
+            const end: usize = if (entry.addr > std.math.maxInt(usize) - entry.len) std.math.maxInt(usize) else @truncate(entry.addr + entry.len);
+            try reserved_physical_mem.append(.{
+                .start = @truncate(entry.addr),
+                .end = end,
+            });
         }
     }
 
