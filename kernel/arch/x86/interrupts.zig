@@ -4,7 +4,7 @@ const Irq = @import("Irq.zig");
 const Gdt = @import("Gdt.zig");
 const isr = @import("isr.zig");
 
-export fn handler(state: *Cpu.State) usize {
+fn handler(state: *Cpu.State) usize {
     if (state.int_num < Irq.OFFSET) {
         return isr.handler(state);
     } else {
@@ -12,7 +12,7 @@ export fn handler(state: *Cpu.State) usize {
     }
 }
 
-export fn commonStub() callconv(.Naked) void {
+fn commonStub() callconv(.Naked) void {
     asm volatile (
         \\pusha
         \\push  %%ds
@@ -28,7 +28,7 @@ export fn commonStub() callconv(.Naked) void {
         \\mov   %%ax, %%gs
         \\mov   %%esp, %%eax
         \\push  %%eax
-        \\call  handler
+        \\call  %[handler:P]
         \\mov   %%eax, %%esp
         \\pop   %%eax
         \\mov   %%cr3, %%ebx
@@ -46,7 +46,8 @@ export fn commonStub() callconv(.Naked) void {
         \\sub   $0x14, %%esp
         \\iret
         :
-        : [main_tss_entry] "R" (&Gdt.main_tss_entry),
+        : [handler] "X" (&handler),
+          [main_tss_entry] "R" (&Gdt.main_tss_entry),
     );
 }
 
@@ -61,9 +62,10 @@ pub fn getStub(comptime i: u32) Idt.Handler {
 
             asm volatile (
                 \\ pushl %[nr]
-                \\ jmp commonStub
+                \\ jmp %[commonStub:P]
                 :
                 : [nr] "n" (i),
+                  [commonStub] "X" (&commonStub),
             );
         }
     }).func;
