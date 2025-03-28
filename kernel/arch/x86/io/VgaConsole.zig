@@ -40,13 +40,13 @@ inline fn entry(ch: u8, cv: u8) u16 {
 }
 
 fn moveCursor(width: u8, x: u8, y: u8) void {
-    const pos = @as(u16, y * width + x);
+    const pos = @as(u16, y) * @as(u16, width) + @as(u16, x);
 
     pio.out(0x3d4, @as(u8, 0x0f));
     pio.out(0x3d5, @as(u8, @truncate(pos & 0xff)));
 
     pio.out(0x3d4, @as(u8, 0xe));
-    pio.out(0x3d5, @as(u8, @truncate((pos >> 8) & 0xff)));
+    pio.out(0x3d5, @as(u8, @truncate(@as(u8, @truncate(pos >> 8)) & 0xff)));
 }
 
 pub fn init() VgaConsole {

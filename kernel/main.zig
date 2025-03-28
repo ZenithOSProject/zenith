@@ -12,10 +12,4 @@ comptime {
 
 pub const panic = if (@hasDecl(platform, "panic")) platform.panic else std.debug.FullPanic(std.debug.defaultPanic);
 
-pub fn main() void {
-    b();
-}
-
-pub fn b() void {
-    std.debug.panicExtra(@frameAddress(), "Shuba", .{});
-}
+pub fn main() void {}

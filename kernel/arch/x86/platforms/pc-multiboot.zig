@@ -1,10 +1,15 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Multiboot = @import("../../../boot/Multiboot.zig");
+const mem = @import("../../../mem.zig");
 const arch = @import("../../x86.zig");
 const io = @import("../io.zig");
 
-export var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Multiboot.Header.init(.{});
+extern var kernel_paddr_offset: *u8;
+extern var kernel_vaddr_offset: *u8;
+extern var kernel_vaddr_end: *u8;
+
+export var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Multiboot.Header.init(Multiboot.Header.Flags.ALIGN | Multiboot.Header.Flags.MEMINFO);
 
 var stack_bytes: [64 * 1024]u8 align(16) linksection(".bss.stack") = undefined;
 
@@ -88,7 +93,26 @@ fn _start_higher() callconv(.C) noreturn {
 }
 
 fn _start_bootstrap() callconv(.C) void {
+    const mb_info_addr = asm (
+        \\mov %%ebx, %[res]
+        : [res] "=r" (-> usize),
+    ) + @intFromPtr(&kernel_paddr_offset);
+
+    mem.ADDR_OFFSET = @intFromPtr(&kernel_paddr_offset);
+
     arch.bootstrap();
+
+    const kmem_virt = mem.Range{
+        .start = @intFromPtr(&kernel_vaddr_offset),
+        .end = @intFromPtr(&kernel_vaddr_end),
+    };
+
+    Multiboot.info = @ptrFromInt(mb_info_addr);
+
+    const profile = Multiboot.initMem(kernel_panic_allocator, kmem_virt, .{
+        .start = mem.virtToPhys(kmem_virt.start),
+        .end = mem.virtToPhys(kmem_virt.end),
+    }) catch |err| std.debug.panic("Failed to initialize memory from multiboot: {s}", .{@errorName(err)});
 
     vga_console.reset();
     com1.reset() catch unreachable;
@@ -96,102 +120,28 @@ fn _start_bootstrap() callconv(.C) void {
     var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
 
     _ = console.write("Hello, world\n") catch unreachable;
-    _ = console.writer().print("{}\n", .{com1}) catch unreachable;
+    _ = console.writer().print("{}\n", .{profile}) catch unreachable;
 
     @import("root").main();
-    //_ = console.writer().print("{s}\n", .{(std.zig.system.resolveTargetQuery(.{}) catch builtin.target).cpu.model.name}) catch unreachable;
 }
 
 pub const panic = std.debug.FullPanic(panicFunc);
-
-extern var __debug_info_start: *u8;
-extern var __debug_info_end: *u8;
-extern var __debug_abbrev_start: *u8;
-extern var __debug_abbrev_end: *u8;
-extern var __debug_str_start: *u8;
-extern var __debug_str_end: *u8;
-extern var __debug_line_start: *u8;
-extern var __debug_line_end: *u8;
-extern var __debug_ranges_start: *u8;
-extern var __debug_ranges_end: *u8;
 
 var kernel_panic_allocator_bytes: [100 * 1024]u8 = undefined;
 var kernel_panic_allocator_state = std.heap.FixedBufferAllocator.init(kernel_panic_allocator_bytes[0..]);
 const kernel_panic_allocator = kernel_panic_allocator_state.allocator();
 
-fn openDwarfInfo() !std.debug.Dwarf {
-    var sections: std.debug.Dwarf.SectionArray = std.debug.Dwarf.null_section_array;
-
-    const debug_info_ptr: [*]u8 = @ptrFromInt(@as(usize, @intFromPtr(&__debug_info_start)));
-    const debug_info_size = @intFromPtr(&__debug_info_end) - @intFromPtr(&__debug_info_start);
-    sections[@intFromEnum(std.debug.Dwarf.Section.Id.debug_info)] = .{
-        .data = debug_info_ptr[0..debug_info_size],
-        //.virtual_address = @intFromPtr(__debug_info_start),
-        .owned = false,
-    };
-
-    const debug_abbrev_ptr: [*]u8 = @ptrFromInt(@as(usize, @intFromPtr(&__debug_abbrev_start)));
-    const debug_abbrev_size = @intFromPtr(&__debug_abbrev_end) - @intFromPtr(&__debug_abbrev_start);
-    sections[@intFromEnum(std.debug.Dwarf.Section.Id.debug_abbrev)] = .{
-        .data = debug_abbrev_ptr[0..debug_abbrev_size],
-        //.virtual_address = @intFromPtr(__debug_abbrev_start),
-        .owned = false,
-    };
-
-    try com1.writer().print("{x} {any}\n", .{ @as(usize, @intFromPtr(&__debug_abbrev_start)), debug_abbrev_ptr[0..debug_abbrev_size] });
-
-    const debug_str_ptr: [*]u8 = @ptrFromInt(@as(usize, @intFromPtr(&__debug_str_start)));
-    const debug_str_size = @intFromPtr(&__debug_str_end) - @intFromPtr(&__debug_str_start);
-    sections[@intFromEnum(std.debug.Dwarf.Section.Id.debug_str)] = .{
-        .data = debug_str_ptr[0..debug_str_size],
-        //.virtual_address = @intFromPtr(__debug_str_start),
-        .owned = false,
-    };
-
-    const debug_ranges_ptr: [*]u8 = @ptrFromInt(@as(usize, @intFromPtr(&__debug_ranges_start)));
-    const debug_ranges_size = @intFromPtr(&__debug_ranges_end) - @intFromPtr(&__debug_ranges_start);
-    sections[@intFromEnum(std.debug.Dwarf.Section.Id.debug_ranges)] = .{
-        .data = debug_ranges_ptr[0..debug_ranges_size],
-        //.virtual_address = @intFromPtr(__debug_ranges_start),
-        .owned = false,
-    };
-
-    var di: std.debug.Dwarf = .{
-        .endian = builtin.target.cpu.arch.endian(),
-        .sections = sections,
-        .is_macho = false,
-    };
-
-    try std.debug.Dwarf.open(&di, kernel_panic_allocator);
-    return di;
-}
-
 fn panicFunc(msg: []const u8, first_trace_addr: ?usize) noreturn {
-    var console = com1.writer();
+    var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
 
-    _ = console.print("\rPANIC: {s} ({?x})\n", .{ msg, first_trace_addr }) catch unreachable;
+    _ = console.writer().print("\rPANIC: {s} ({?x})\n", .{ msg, first_trace_addr }) catch unreachable;
 
     if (first_trace_addr) |trace_addr| {
-        var dwarf = openDwarfInfo() catch |err| {
-            _ = console.print("Failed to open Dwarf: {s}\n", .{@errorName(err)}) catch unreachable;
-            if (@errorReturnTrace()) |trace| {
-                for (trace.instruction_addresses) |addr| {
-                    _ = console.print("{x}\n", .{addr}) catch unreachable;
-                }
-            }
-            while (true) {}
-        };
-        defer dwarf.deinit(kernel_panic_allocator);
-
-        _ = console.writeAll("Stack trace:\n") catch unreachable;
+        _ = console.writer().writeAll("Stack trace:\n") catch unreachable;
 
         var it = std.debug.StackIterator.init(null, trace_addr);
         while (it.next()) |addr| {
-            if (dwarf.getSymbol(kernel_panic_allocator, addr) catch null) |sym| {
-                _ = console.print("{s}\n", .{sym.name}) catch unreachable;
-            } else {
-                _ = console.print("{x}\n", .{addr}) catch unreachable;
-            }
+            _ = console.writer().print("{x}\n", .{addr}) catch unreachable;
         }
     }
 
