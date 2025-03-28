@@ -4,6 +4,7 @@ const cpu = @import("Cpu.zig");
 const io = @import("io.zig");
 const isr = @import("isr.zig");
 const mem = @import("../../mem.zig");
+const log = std.log.scoped(.@"arch.x86.paging");
 
 const ENTRIES_PER_DIRECTORY: u32 = 1024;
 const ENTRIES_PER_TABLE: u32 = 1024;
@@ -236,6 +237,15 @@ pub fn map(virtual_start: usize, virtual_end: usize, phys_start: usize, phys_end
     }) {
         try mapDirEntry(dir, virt_addr, virt_next, phys_addr, phys_next, attrs, allocator);
     }
+
+    log.info("Mapped {x} - {x} / {x} - {x} ({}) in {x}", .{
+       virtual_start,
+       virtual_end,
+       phys_start,
+       phys_end,
+       attrs,
+       @intFromPtr(dir),
+    });
 }
 
 pub fn unmap(virtual_start: usize, virtual_end: usize, allocator: Allocator, dir: *Directory) mem.virt.MapperError!void {

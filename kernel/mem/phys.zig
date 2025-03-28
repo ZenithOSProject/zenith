@@ -2,6 +2,7 @@ const std = @import("std");
 const arch = @import("../main.zig").arch;
 const mem = @import("../mem.zig");
 const Bitmap = @import("../bitmap.zig").Bitmap(null, u32);
+const log = std.log.scoped(.@"mem.phys");
 
 pub const BLOCK_SIZE: usize = arch.MEMORY_BLOCK_SIZE;
 
@@ -48,5 +49,7 @@ pub fn init(memprofile: *const mem.Profile, allocator: std.mem.Allocator) void {
         while (addr < end) : (addr += BLOCK_SIZE) setAddr(addr) catch |e| switch (e) {
             error.OutOfBounds => break,
         };
+
+        log.info("Reserving physical memory {x} - {x}", .{entry.start, end});
     }
 }

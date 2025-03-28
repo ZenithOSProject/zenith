@@ -22,7 +22,7 @@ pub const Header = extern struct {
     };
 };
 
-pub const Info = packed struct {
+pub const Info = extern struct {
     flags: u32,
     mem_lower: u32,
     mem_upper: u32,
@@ -30,14 +30,14 @@ pub const Info = packed struct {
     cmdline: u32,
     mods_count: u32,
     mods_addr: u32,
-    binary: packed union {
-        aout: packed struct {
+    binary: extern union {
+        aout: extern struct {
             tabsize: u32,
             strsize: u32,
             addr: u32,
             reserved: u32,
         },
-        elf: packed struct {
+        elf: extern struct {
             num: u32,
             size: u32,
             addr: u32,

@@ -324,7 +324,6 @@ pub fn init(memprofile: *const mem.Profile, allocator: std.mem.Allocator) Alloca
 
         kernel_vmm.set(virtual, physical, .{ .kernel = true, .writable = true, .cachable = true }) catch |e| switch (e) {
             Error.AlreadyAllocated => {},
-            Error.PhysicalAlreadyAllocated => {},
             else => std.debug.panicExtra(
                 if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress(),
                 "Failed mapping region in VMM ({x} - {x} / {?x} - {?x}): {s}",
