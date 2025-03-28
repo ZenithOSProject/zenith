@@ -22,10 +22,9 @@ fn _start_bootstrap() callconv(.C) void {
         : [el1] "r" (el1),
     );
 
-    var serial = io.SerialConsole{};
-    _ = serial.write("Hello, world\n") catch unreachable;
-    _ = serial.writer().print("{}\n", .{serial}) catch unreachable;
-    while (true) {}
+    @import("root").main();
+    @breakpoint();
+    while (true) @trap();
 }
 
 pub const panic = std.debug.FullPanic(panicFunc);
@@ -35,4 +34,17 @@ fn panicFunc(msg: []const u8, first_trace_addr: ?usize) noreturn {
     var serial = io.SerialConsole{};
     _ = serial.write(msg) catch unreachable;
     while (true) {}
+}
+
+pub fn logFn(
+    comptime message_level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const level_txt = comptime message_level.asText();
+    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+
+    var serial = io.SerialConsole{};
+    _ = serial.writer().print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
 }
