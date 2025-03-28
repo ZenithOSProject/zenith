@@ -4,6 +4,7 @@ const Multiboot = @import("../../../boot/Multiboot.zig");
 const mem = @import("../../../mem.zig");
 const arch = @import("../../x86.zig");
 const io = @import("../io.zig");
+const paging = @import("../paging.zig");
 
 extern var kernel_paddr_offset: *u8;
 extern var kernel_vaddr_offset: *u8;
@@ -113,6 +114,8 @@ fn _start_bootstrap() callconv(.C) void {
         .start = mem.virtToPhys(kmem_virt.start),
         .end = mem.virtToPhys(kmem_virt.end),
     }) catch |err| std.debug.panic("Failed to initialize memory from multiboot: {s}", .{@errorName(err)});
+
+    paging.init(&profile);
 
     vga_console.reset();
     com1.reset() catch unreachable;
