@@ -126,11 +126,6 @@ fn _start_bootstrap() callconv(.C) void {
     vga_console.reset();
     com1.reset() catch unreachable;
 
-    var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
-
-    _ = console.write("Hello, world\n") catch unreachable;
-    _ = console.writer().print("RAM: {} bytes\n", .{mem_profile.mem_kb * 1024}) catch unreachable;
-
     @import("root").main();
 
     @breakpoint();

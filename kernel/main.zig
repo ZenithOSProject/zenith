@@ -19,4 +19,6 @@ pub const std_options: std.Options = .{
     .page_size_max = if (@hasDecl(platform, "page_size_max")) platform.page_size_max else null,
 };
 
-pub fn main() void {}
+pub fn main() void {
+    std.log.info("Hello from Zenith", .{});
+}

@@ -3,23 +3,17 @@ const arch = @import("../main.zig").arch;
 const platform = @import("../main.zig").platform;
 const mem = @import("../mem.zig");
 
-pub const uint8_t = u8;
-pub const uint16_t = c_ushort;
-pub const uint32_t = c_uint;
-pub const int32_t = c_int;
-pub const uint64_t = c_ulonglong;
-
 pub const magic: i32 = 0x1BADB002;
 
 pub const Header = extern struct {
-    magic: uint32_t = MAGIC,
-    flags: uint32_t,
-    checksum: int32_t,
+    magic: u32 = MAGIC,
+    flags: u32,
+    checksum: i32,
 
-    pub fn init(flags: uint32_t) Header {
+    pub fn init(flags: u32) Header {
         return .{
             .flags = flags,
-            .checksum = -(@as(int32_t, @intCast(MAGIC)) + @as(int32_t, @intCast(flags))),
+            .checksum = -(@as(i32, @intCast(MAGIC)) + @as(i32, @intCast(flags))),
         };
     }
 
@@ -31,34 +25,34 @@ pub const Header = extern struct {
 };
 
 pub const Info = extern struct {
-    flags: uint32_t,
-    mem_lower: uint32_t,
-    mem_upper: uint32_t,
-    boot_device: uint32_t,
-    cmdline: uint32_t,
-    mods_count: uint32_t,
-    mods_addr: uint32_t,
+    flags: u32,
+    mem_lower: u32,
+    mem_upper: u32,
+    boot_device: u32,
+    cmdline: u32,
+    mods_count: u32,
+    mods_addr: u32,
     binary: extern union {
         aout: extern struct {
-            tabsize: uint32_t,
-            strsize: uint32_t,
-            addr: uint32_t,
-            reserved: uint32_t,
+            tabsize: u32,
+            strsize: u32,
+            addr: u32,
+            reserved: u32,
         },
         elf: extern struct {
-            num: uint32_t,
-            size: uint32_t,
-            addr: uint32_t,
-            shndx: uint32_t,
+            num: u32,
+            size: u32,
+            addr: u32,
+            shndx: u32,
         },
     },
-    mmap_len: uint32_t,
-    mmap_addr: uint32_t,
-    drives_len: uint32_t,
-    drives_addr: uint32_t,
-    cfgtbl: uint32_t,
-    bootloader_name: uint32_t,
-    apm_table: uint32_t,
+    mmap_len: u32,
+    mmap_addr: u32,
+    drives_len: u32,
+    drives_addr: u32,
+    cfgtbl: u32,
+    bootloader_name: u32,
+    apm_table: u32,
 
     pub fn mmapIterator(self: *const Info) MemoryMap.Iterator {
         return .{
@@ -69,12 +63,12 @@ pub const Info = extern struct {
 };
 
 pub const MemoryMap = packed struct {
-    size: uint32_t,
-    addr: uint64_t,
-    len: uint64_t,
+    size: u32,
+    addr: u64,
+    len: u64,
     type: Type,
 
-    pub const Type = enum(uint32_t) {
+    pub const Type = enum(u32) {
         available = 1,
         reserved = 2,
         acpi_reclaim = 3,
@@ -91,17 +85,17 @@ pub const MemoryMap = packed struct {
 
             @setRuntimeSafety(false);
             const entry: *MemoryMap = @as(*MemoryMap, @ptrFromInt(self.addr));
-            self.addr += entry.size + @sizeOf(uint32_t);
+            self.addr += entry.size + @sizeOf(u32);
             return entry;
         }
     };
 };
 
 pub const ModuleList = packed struct {
-    mod_start: uint32_t,
-    mod_end: uint32_t,
-    cmdline: uint32_t,
-    pad: uint32_t,
+    mod_start: u32,
+    mod_end: u32,
+    cmdline: u32,
+    pad: u32,
 };
 
 pub var info: ?*const Info = null;
