@@ -15,16 +15,36 @@ const com1 = io.SerialConsole{
 };
 
 var vga_console = io.VgaConsole.init();
+var mem_profile: mem.Profile = undefined;
 
-pub fn bootstrap(mem_profile: *const mem.Profile) void {
-    mem.phys.init(mem_profile, kernel_alloc);
+pub fn bootstrap(init_mem_profile: mem.Profile) void {
+    const vga_console_addr = mem.virtToPhys(@as(usize, @intFromPtr(vga_console.buffer().ptr)));
+    const vga_console_region = mem.Range{
+        .start = vga_console_addr,
+        .end = vga_console_addr + 32 * 1024,
+    };
 
-    _ = mem.virt.init(mem_profile, kernel_alloc) catch |err| {
+    mem_profile = init_mem_profile.expandReserved(&.{}, &.{
+        .{
+            .physical = vga_console_region,
+            .virtual = .{
+                .start = mem.physToVirt(vga_console_region.start),
+                .end = mem.physToVirt(vga_console_region.end),
+            },
+        },
+    }) catch |err| {
+        const addr = if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress();
+        std.debug.panicExtra(addr, "Failed to expand memory profile: {s}", .{@errorName(err)});
+    };
+
+    mem.phys.init(&mem_profile, kernel_alloc);
+
+    _ = mem.virt.init(&mem_profile, kernel_alloc) catch |err| {
         const addr = if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress();
         std.debug.panicExtra(addr, "Failed to initialize virt-mmu: {s}", .{@errorName(err)});
     };
 
-    paging.init(mem_profile);
+    paging.init(&mem_profile);
 
     vga_console.reset();
     com1.reset() catch unreachable;
@@ -61,27 +81,6 @@ pub fn logFn(
     var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
 
     _ = console.writer().print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
-}
-
-pub fn initMem(
-    reserved_physical_mem: *std.ArrayList(mem.Range),
-    reserved_virtual_mem: *std.ArrayList(mem.Map),
-) !void {
-    _ = reserved_physical_mem;
-
-    const vga_console_addr = mem.virtToPhys(@as(usize, @intFromPtr(vga_console.buffer().ptr)));
-    const vga_console_region = mem.Range{
-        .start = vga_console_addr,
-        .end = vga_console_addr + 32 * 1024,
-    };
-
-    try reserved_virtual_mem.append(.{
-        .physical = vga_console_region,
-        .virtual = .{
-            .start = mem.physToVirt(vga_console_region.start),
-            .end = mem.physToVirt(vga_console_region.end),
-        },
-    });
 }
 
 pub fn queryPageSize() usize {

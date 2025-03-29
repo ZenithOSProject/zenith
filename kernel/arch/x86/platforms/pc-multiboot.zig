@@ -14,8 +14,6 @@ var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Multiboot.H
 
 var stack_bytes: [64 * 1024]u8 align(16) linksection(".bss.stack") = undefined;
 
-var mem_profile: mem.Profile = undefined;
-
 const KERNEL_PAGE_NUMBER = 0xC0000000 >> 22;
 const KERNEL_NUM_PAGES = 1;
 
@@ -105,14 +103,14 @@ fn _start_bootstrap() callconv(.C) void {
 
     Multiboot.info = @ptrFromInt(mb_info_addr);
 
-    mem_profile = Multiboot.initMem(pc.kernel_alloc, kmem_virt, .{
+    var mem_profile = Multiboot.initMem(pc.kernel_alloc, kmem_virt, .{
         .start = mem.virtToPhys(kmem_virt.start),
         .end = mem.virtToPhys(kmem_virt.end),
     }) catch |err| std.debug.panic("Failed to initialize memory from multiboot: {s}", .{
         @errorName(err),
     });
-
-    pc.bootstrap(&mem_profile);
+    defer mem_profile.deinit();
+    pc.bootstrap(mem_profile);
 
     @import("root").main();
 

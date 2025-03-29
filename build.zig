@@ -153,6 +153,7 @@ pub fn build(b: *std.Build) void {
 
             run_kernel_test.addArgs(&.{
                 "-nographic",
+                "-no-reboot",
                 "-display",
                 "none",
                 "-monitor",

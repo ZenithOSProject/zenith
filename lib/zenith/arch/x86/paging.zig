@@ -183,7 +183,7 @@ fn mapDirEntry(dir: *Directory, virt_start: usize, virt_end: usize, phys_start: 
     } else {
         table = &(try allocator.alignedAlloc(Table, @as(u29, @truncate(std.heap.pageSize())), 1))[0];
         @memset(@as([*]u8, @ptrCast(table))[0..@sizeOf(Table)], 0);
-        const table_phys_addr = mem.virt.kernel_vmm.virtToPhys(@intFromPtr(table)) catch |e| std.debug.panic("Failed getting the physical address for a page table: {}\n", .{e});
+        const table_phys_addr = mem.virt.kernel_vmm.virtToPhys(@intFromPtr(table)) catch |e| std.debug.panic("Failed getting the physical address for a page table: {}", .{e});
         dir_entry.* |= DENTRY_PAGE_ADDR & table_phys_addr;
         dir.tables[entry] = table;
     }

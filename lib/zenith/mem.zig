@@ -34,10 +34,38 @@ pub const Profile = struct {
     vaddr: Block,
     paddr: Block,
     mem_kb: usize,
-    modules: []Module,
-    virtual_reserved: []Map,
-    physical_reserved: []Range,
+    modules: []const Module,
+    virtual_reserved: []const Map,
+    physical_reserved: []const Range,
     fixed_allocator: std.mem.Allocator,
+
+    pub fn deinit(self: Profile) void {
+        self.fixed_allocator.free(self.modules);
+        self.fixed_allocator.free(self.virtual_reserved);
+        self.fixed_allocator.free(self.physical_reserved);
+    }
+
+    pub fn expandReserved(self: Profile, physical_reserved: []const Range, virtual_reserved: []const Map) !Profile {
+        var new_virtual_reserved = std.ArrayList(Map).init(self.fixed_allocator);
+        errdefer new_virtual_reserved.deinit();
+        try new_virtual_reserved.appendSlice(self.virtual_reserved);
+        try new_virtual_reserved.appendSlice(virtual_reserved);
+
+        var new_physical_reserved = std.ArrayList(Range).init(self.fixed_allocator);
+        errdefer new_physical_reserved.deinit();
+        try new_physical_reserved.appendSlice(self.physical_reserved);
+        try new_physical_reserved.appendSlice(physical_reserved);
+
+        return .{
+            .vaddr = self.vaddr,
+            .paddr = self.paddr,
+            .mem_kb = self.mem_kb,
+            .modules = try self.fixed_allocator.dupe(Module, self.modules),
+            .virtual_reserved = new_virtual_reserved.items,
+            .physical_reserved = new_physical_reserved.items,
+            .fixed_allocator = self.fixed_allocator,
+        };
+    }
 };
 
 pub var ADDR_OFFSET: usize = 0;
