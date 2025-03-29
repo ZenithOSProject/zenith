@@ -37,14 +37,10 @@ pub fn bootstrap(init_mem_profile: mem.Profile) void {
         std.debug.panicExtra(addr, "Failed to expand memory profile: {s}", .{@errorName(err)});
     };
 
-    mem.phys.init(&mem_profile, kernel_alloc);
-
-    _ = mem.virt.init(&mem_profile, kernel_alloc) catch |err| {
+    _ = mem.init(&mem_profile, kernel_alloc) catch |err| {
         const addr = if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress();
-        std.debug.panicExtra(addr, "Failed to initialize virt-mmu: {s}", .{@errorName(err)});
+        std.debug.panicExtra(addr, "Failed to initialize mmu: {s}", .{@errorName(err)});
     };
-
-    paging.init(&mem_profile);
 
     vga_console.reset();
     com1.reset() catch unreachable;

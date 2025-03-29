@@ -107,13 +107,21 @@ pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.
     var reserved_virtual_mem = std.ArrayList(mem.Map).init(gpa);
     defer reserved_virtual_mem.deinit();
 
+    var available_mem = std.ArrayList(mem.Range).init(gpa);
+    defer available_mem.deinit();
+
     var mmap_iter = info.?.mmapIterator();
 
     while (mmap_iter.next()) |entry| {
         if (entry.type != .available and entry.len < std.math.maxInt(usize)) {
-            //FIXME: getting all the wrong values
             const end: usize = if (entry.addr > std.math.maxInt(usize) - entry.len) std.math.maxInt(usize) else @truncate(entry.addr + entry.len);
             try reserved_physical_mem.append(.{
+                .start = @truncate(entry.addr),
+                .end = end,
+            });
+        } else if (entry.type == .available and entry.len < std.math.maxInt(usize)) {
+            const end: usize = if (entry.addr > std.math.maxInt(usize) - entry.len) std.math.maxInt(usize) else @truncate(entry.addr + entry.len);
+            try available_mem.append(.{
                 .start = @truncate(entry.addr),
                 .end = end,
             });
@@ -167,6 +175,7 @@ pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.
         .modules = modules.items,
         .physical_reserved = try reserved_physical_mem.toOwnedSlice(),
         .virtual_reserved = try reserved_virtual_mem.toOwnedSlice(),
+        .available = try available_mem.toOwnedSlice(),
         .fixed_allocator = gpa,
     };
 }
