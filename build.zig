@@ -68,6 +68,12 @@ pub fn build(b: *std.Build) void {
 
         const run_module_tests = b.addRunArtifact(module_tests);
         step_test.dependOn(&run_module_tests.step);
+
+        b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+            .source_dir = module_tests.getEmittedDocs(),
+            .install_dir = .prefix,
+            .install_subdir = "docs/zenith",
+        }).step);
     }
 
     if (standardPlatformOption(b, target)) |platform| {
@@ -132,6 +138,12 @@ pub fn build(b: *std.Build) void {
 
             kernel_test.link_gc_sections = false;
             kernel_test.setLinkerScript(kernel_exec.linker_script orelse unreachable);
+
+            b.getInstallStep().dependOn(&b.addInstallDirectory(.{
+                .source_dir = kernel_test.getEmittedDocs(),
+                .install_dir = .prefix,
+                .install_subdir = "docs/zenith",
+            }).step);
 
             const run_kernel_test = b.addSystemCommand(&.{
                 b.findProgram(&.{

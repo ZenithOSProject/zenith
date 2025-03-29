@@ -10,4 +10,5 @@ pub fn main() void {
 
 comptime {
     _ = Self.arch;
+    _ = @import("zenith");
 }
