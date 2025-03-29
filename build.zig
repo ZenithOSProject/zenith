@@ -48,10 +48,38 @@ fn qemuBinary(b: *std.Build, target: std.Target) []const u8 {
     }});
 }
 
+fn gitHash(b: *std.Build) ?[]const u8 {
+    const git = b.findProgram(&.{ "git" }, &.{}) catch return null;
+
+    var e: u8 = 0;
+    const result = b.runAllowFail(&.{
+        git,
+        "rev-parse",
+        "HEAD",
+    }, &e, .Inherit) catch return null;
+    return result[0..(std.mem.indexOf(u8, result, "\n") orelse unreachable)];
+}
+
 pub fn build(b: *std.Build) void {
     const target = standardTargetOptions(b, .{});
     const optimize = b.standardOptimizeOption(.{});
     const use_llvm = b.option(bool, "use-llvm", "Use LLVM or Zig's built in codegen");
+
+    const build_zon = std.zon.parse.fromSlice(struct {
+        version: []const u8,
+    }, b.allocator, @embedFile("build.zig.zon"), null, .{
+        .ignore_unknown_fields = true,
+    }) catch |err| {
+        std.debug.panic("Failed to parse build.zig.zon: {s}", .{@errorName(err)});
+    };
+
+    var version = std.SemanticVersion.parse(build_zon.version) catch |err| {
+        std.debug.panic("Failed to parse version in build.zig.zon: {s}", .{@errorName(err)});
+    };
+
+    if (gitHash(b)) |hash| {
+        version.build = hash[0..7];
+    }
 
     const module = b.addModule("zenith", .{
         .target = target,
@@ -64,6 +92,7 @@ pub fn build(b: *std.Build) void {
     if (target.result.os.tag != .freestanding) {
         const module_tests = b.addTest(.{
             .root_module = module,
+            .version = version,
         });
 
         const run_module_tests = b.addRunArtifact(module_tests);
@@ -79,6 +108,7 @@ pub fn build(b: *std.Build) void {
     if (standardPlatformOption(b, target)) |platform| {
         const options = b.addOptions();
         options.addOption([]const u8, "platform", platform);
+        options.addOption(std.SemanticVersion, "version", version);
 
         const limine = b.dependency("limine", .{
             .api_revision = 3,
@@ -109,6 +139,7 @@ pub fn build(b: *std.Build) void {
             .linkage = .static,
             .use_llvm = use_llvm,
             .root_module = kernel_module,
+            .version = version,
         });
 
         if (target.result.os.tag == .freestanding) {
@@ -130,6 +161,7 @@ pub fn build(b: *std.Build) void {
 
             const kernel_test = b.addTest(.{
                 .root_module = kernel_module,
+                .version = version,
                 .test_runner = .{
                     .path = b.path("kernel/test_main.zig"),
                     .mode = .simple,

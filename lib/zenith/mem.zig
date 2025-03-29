@@ -87,3 +87,25 @@ pub fn physToVirt(p: anytype) @TypeOf(p) {
         else => @compileError("Only pointers and integers are supported"),
     };
 }
+
+test "virtToPhys" {
+    const old_addr_offset = ADDR_OFFSET;
+    defer ADDR_OFFSET = old_addr_offset;
+
+    ADDR_OFFSET = 0xC0000000;
+
+    try std.testing.expectEqual(virtToPhys(ADDR_OFFSET), 0);
+    try std.testing.expectEqual(virtToPhys(ADDR_OFFSET + 123), 123);
+    try std.testing.expectEqual(@intFromPtr(virtToPhys(@as(*align(1) usize, @ptrFromInt(ADDR_OFFSET + 123)))), 123);
+}
+
+test "physToVirt" {
+    const old_addr_offset = ADDR_OFFSET;
+    defer ADDR_OFFSET = old_addr_offset;
+
+    ADDR_OFFSET = 0xC0000000;
+
+    try std.testing.expectEqual(physToVirt(@as(usize, 0)), ADDR_OFFSET + 0);
+    try std.testing.expectEqual(physToVirt(@as(usize, 123)), ADDR_OFFSET + 123);
+    try std.testing.expectEqual(@intFromPtr(physToVirt(@as(*align(1) usize, @ptrFromInt(123)))), ADDR_OFFSET + 123);
+}
