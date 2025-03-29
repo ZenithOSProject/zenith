@@ -1,15 +1,16 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Multiboot = @import("../../../boot/Multiboot.zig");
-const mem = @import("../../../mem.zig");
-const arch = @import("../../x86.zig");
+const zenith = @import("zenith");
+const Multiboot = zenith.boot.Multiboot;
+const mem = zenith.mem;
+const arch = zenith.arch.x86;
 const pc = @import("pc.zig");
 
 extern var kernel_paddr_offset: *u8;
 extern var kernel_vaddr_offset: *u8;
 extern var kernel_vaddr_end: *u8;
 
-export var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Multiboot.Header.init(Multiboot.Header.Flags.ALIGN | Multiboot.Header.Flags.MEMINFO);
+var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Multiboot.Header.init(Multiboot.Header.Flags.ALIGN | Multiboot.Header.Flags.MEMINFO);
 
 var stack_bytes: [64 * 1024]u8 align(16) linksection(".bss.stack") = undefined;
 
@@ -51,7 +52,7 @@ var boot_page_directory: [1024]u32 align(4096) linksection(".rodata.boot") = ini
     break :init dir;
 };
 
-export fn _start() linksection(".text.boot") callconv(.Naked) noreturn {
+fn _start() linksection(".text.boot") callconv(.Naked) noreturn {
     asm volatile (
         \\mov %[boot_page_directory], %%ecx
         \\mov %%ecx, %%cr3
@@ -124,3 +125,13 @@ pub const logFn = pc.logFn;
 pub const queryPageSize = pc.queryPageSize;
 pub const page_size_min = pc.page_size_min;
 pub const page_size_max = pc.page_size_max;
+
+comptime {
+    @export(&multiboot, .{
+        .name = "multiboot",
+    });
+
+    @export(&_start, .{
+        .name = "_start",
+    });
+}

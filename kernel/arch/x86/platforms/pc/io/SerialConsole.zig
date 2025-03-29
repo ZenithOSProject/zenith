@@ -1,5 +1,5 @@
 const std = @import("std");
-const pio = @import("../../../io/port.zig");
+const pio = @import("zenith").arch.x86.io.port;
 const SerialConsole = @This();
 
 pub const Port = enum(u16) {

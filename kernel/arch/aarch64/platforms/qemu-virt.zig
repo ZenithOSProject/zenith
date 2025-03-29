@@ -3,7 +3,7 @@ const io = @import("qemu-virt/io.zig");
 
 var stack_bytes: [64 * 1024]u8 align(16) linksection(".bss") = undefined;
 
-export fn _start() callconv(.Naked) noreturn {
+fn _start() callconv(.Naked) noreturn {
     asm volatile (
         \\ldr x30, =%[stack_top]
         \\mov sp, x30
@@ -47,4 +47,8 @@ pub fn logFn(
 
     var serial = io.SerialConsole{};
     _ = serial.writer().print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
+}
+
+comptime {
+    @export(&_start, .{ .name = "_start" });
 }

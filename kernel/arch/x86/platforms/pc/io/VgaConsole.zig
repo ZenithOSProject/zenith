@@ -1,6 +1,7 @@
 const std = @import("std");
-const pio = @import("../../../io/port.zig");
-const mem = @import("../../../../../mem.zig");
+const zenith = @import("zenith");
+const pio = zenith.arch.x86.io.port;
+const mem = zenith.mem;
 const VgaConsole = @This();
 
 fg: std.io.tty.Color,

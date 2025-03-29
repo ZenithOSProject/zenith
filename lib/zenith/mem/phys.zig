@@ -1,8 +1,9 @@
+const builtin = @import("builtin");
 const std = @import("std");
-const arch = @import("../main.zig").arch;
+const arch = @field(@import("../arch.zig"), @tagName(builtin.target.cpu.arch));
 const mem = @import("../mem.zig");
 const Bitmap = @import("../bitmap.zig").Bitmap(null, u32);
-const log = std.log.scoped(.@"mem.phys");
+const log = std.log.scoped(.@"zenith.mem.phys");
 
 var mbitmap: Bitmap = undefined;
 
@@ -35,7 +36,10 @@ pub fn blocksFree() usize {
 }
 
 pub fn init(memprofile: *const mem.Profile, allocator: std.mem.Allocator) void {
-    mbitmap = Bitmap.init(memprofile.mem_kb * 1024 / std.heap.pageSize(), allocator) catch |e| std.debug.panic("Failed to allocate physical memory bitmap: {s}", .{@errorName(e)});
+    mbitmap = Bitmap.init(
+        memprofile.mem_kb * 1024 / std.heap.pageSize(),
+        allocator,
+    ) catch |e| std.debug.panic("Failed to allocate physical memory bitmap: {s}", .{@errorName(e)});
 
     for (memprofile.physical_reserved) |entry| {
         var addr = std.mem.alignBackward(usize, entry.start, std.heap.pageSize());
@@ -48,6 +52,6 @@ pub fn init(memprofile: *const mem.Profile, allocator: std.mem.Allocator) void {
             error.OutOfBounds => break,
         };
 
-        log.info("Reserving physical memory {x} - {x}", .{entry.start, end});
+        log.info("Reserving physical memory {x} - {x}", .{ entry.start, end });
     }
 }

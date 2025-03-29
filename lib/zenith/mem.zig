@@ -40,7 +40,7 @@ pub const Profile = struct {
     fixed_allocator: std.mem.Allocator,
 };
 
-pub var ADDR_OFFSET: usize = undefined;
+pub var ADDR_OFFSET: usize = 0;
 
 pub fn virtToPhys(v: anytype) @TypeOf(v) {
     const T = @TypeOf(v);

@@ -1,6 +1,4 @@
 const std = @import("std");
-const arch = @import("../main.zig").arch;
-const platform = @import("../main.zig").platform;
 const mem = @import("../mem.zig");
 
 pub const magic: i32 = 0x1BADB002;
@@ -160,14 +158,6 @@ pub fn initMem(gpa: std.mem.Allocator, vaddr: mem.Range, paddr: mem.Range) !mem.
             .physical = physical,
             .virtual = virtual,
         });
-    }
-
-    if (@hasDecl(arch, "initMem")) {
-        try arch.initMem(&reserved_physical_mem, &reserved_virtual_mem);
-    }
-
-    if (@hasDecl(platform, "initMem")) {
-        try platform.initMem(&reserved_physical_mem, &reserved_virtual_mem);
     }
 
     return mem.Profile{

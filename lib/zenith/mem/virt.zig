@@ -1,11 +1,12 @@
+const builtin = @import("builtin");
 const std = @import("std");
 const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
-const arch = @import("../main.zig").arch;
+const arch = @field(@import("../arch.zig"), @tagName(builtin.target.cpu.arch));
 const Bitmap = @import("../bitmap.zig").Bitmap;
 const mem = @import("../mem.zig");
 const phys = @import("phys.zig");
-const log = std.log.scoped(.@"mem.virt");
+const log = std.log.scoped(.@"zenith.mem.virt");
 
 pub const Attributes = struct {
     kernel: bool,
@@ -40,8 +41,21 @@ pub var kernel_vmm: Manager(arch.VmmPayload) = undefined;
 
 pub fn Mapper(comptime Payload: type) type {
     return struct {
-        mapFn: *const fn (virtual_start: usize, virtual_end: usize, physical_start: usize, physical_end: usize, attrs: Attributes, allocator: Allocator, spec: Payload) (Allocator.Error || MapperError)!void,
-        unmapFn: *const fn (virtual_start: usize, virtual_end: usize, allocator: Allocator, spec: Payload) MapperError!void,
+        mapFn: *const fn (
+            virtual_start: usize,
+            virtual_end: usize,
+            physical_start: usize,
+            physical_end: usize,
+            attrs: Attributes,
+            allocator: Allocator,
+            spec: Payload,
+        ) (Allocator.Error || MapperError)!void,
+        unmapFn: *const fn (
+            virtual_start: usize,
+            virtual_end: usize,
+            allocator: Allocator,
+            spec: Payload,
+        ) MapperError!void,
     };
 }
 

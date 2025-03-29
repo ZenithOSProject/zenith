@@ -1,10 +1,11 @@
 const std = @import("std");
-const mem = @import("../../../mem.zig");
-const paging = @import("../paging.zig");
+const zenith = @import("zenith");
+const mem = zenith.mem;
+const paging = zenith.arch.x86.paging;
 const io = @import("pc/io.zig");
 
 var kernel_alloc_bytes: [1024 * 1024]u8 = undefined;
-var kernel_alloc_state = std.heap.FixedBufferAllocator(kernel_alloc_bytes[0..]);
+var kernel_alloc_state = std.heap.FixedBufferAllocator.init(kernel_alloc_bytes[0..]);
 
 pub const kernel_alloc = kernel_alloc_state.allocator();
 
@@ -16,14 +17,14 @@ const com1 = io.SerialConsole{
 var vga_console = io.VgaConsole.init();
 
 pub fn bootstrap(mem_profile: *const mem.Profile) void {
-    mem.phys.init(&mem_profile, kernel_alloc);
+    mem.phys.init(mem_profile, kernel_alloc);
 
-    _ = mem.virt.init(&mem_profile, kernel_alloc) catch |err| {
+    _ = mem.virt.init(mem_profile, kernel_alloc) catch |err| {
         const addr = if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress();
         std.debug.panicExtra(addr, "Failed to initialize virt-mmu: {s}", .{@errorName(err)});
     };
 
-    paging.init(&mem_profile);
+    paging.init(mem_profile);
 
     vga_console.reset();
     com1.reset() catch unreachable;
