@@ -96,7 +96,7 @@ pub fn build(b: *std.Build) void {
         }
     }
 
-    if (std.mem.eql(u8, platform, "limine")) {
+    if (std.mem.count(u8, platform, "limine") > 0) {
         b.installFile("config/limine.conf", "boot/limine/limine.conf");
     }
 
