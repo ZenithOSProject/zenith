@@ -1,0 +1,17 @@
+.{
+    .name = .zenith,
+    .version = "0.0.0",
+    .fingerprint = 0xde6c523e79c78f0d,
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{
+        .limine = .{
+            .url = "https://github.com/48cf/limine-zig/archive/4281ba905cabe6d8ccd3e062d2e48364c3485172.tar.gz",
+            .hash = "limine_zig-0.0.0-1TjwQOl6AACYbbHZxh6lCxJ-WMBUoz03PUuBZhpKlxQs",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "kernel",
+    },
+}
