@@ -3,8 +3,7 @@ const builtin = @import("builtin");
 const Multiboot = @import("../../../boot/Multiboot.zig");
 const mem = @import("../../../mem.zig");
 const arch = @import("../../x86.zig");
-const io = @import("../io.zig");
-const paging = @import("../paging.zig");
+const pc = @import("pc.zig");
 
 extern var kernel_paddr_offset: *u8;
 extern var kernel_vaddr_offset: *u8;
@@ -14,12 +13,6 @@ export var multiboot: Multiboot.Header align(4) linksection(".multiboot") = Mult
 
 var stack_bytes: [64 * 1024]u8 align(16) linksection(".bss.stack") = undefined;
 
-const com1 = io.SerialConsole{
-    .baud = io.SerialConsole.DEFAULT_BAUDRATE,
-    .port = .COM1,
-};
-
-var vga_console = io.VgaConsole.init();
 var mem_profile: mem.Profile = undefined;
 
 const KERNEL_PAGE_NUMBER = 0xC0000000 >> 22;
@@ -111,20 +104,14 @@ fn _start_bootstrap() callconv(.C) void {
 
     Multiboot.info = @ptrFromInt(mb_info_addr);
 
-    mem_profile = Multiboot.initMem(kernel_panic_allocator, kmem_virt, .{
+    mem_profile = Multiboot.initMem(pc.kernel_alloc, kmem_virt, .{
         .start = mem.virtToPhys(kmem_virt.start),
         .end = mem.virtToPhys(kmem_virt.end),
-    }) catch |err| std.debug.panic("Failed to initialize memory from multiboot: {s}", .{@errorName(err)});
+    }) catch |err| std.debug.panic("Failed to initialize memory from multiboot: {s}", .{
+        @errorName(err),
+    });
 
-    mem.phys.init(&mem_profile, kernel_panic_allocator);
-    _ = mem.virt.init(&mem_profile, kernel_panic_allocator) catch |err| {
-        const addr = if (@errorReturnTrace()) |trace| trace.instruction_addresses[0] else @frameAddress();
-        std.debug.panicExtra(addr, "Failed to initialize virt-mmu: {s}", .{@errorName(err)});
-    };
-    paging.init(&mem_profile);
-
-    vga_console.reset();
-    com1.reset() catch unreachable;
+    pc.bootstrap(&mem_profile);
 
     @import("root").main();
 
@@ -132,73 +119,8 @@ fn _start_bootstrap() callconv(.C) void {
     while (true) @trap();
 }
 
-pub const panic = std.debug.FullPanic(panicFunc);
-
-var kernel_panic_allocator_bytes: [1024 * 1024]u8 = undefined;
-var kernel_panic_allocator_state = std.heap.FixedBufferAllocator.init(kernel_panic_allocator_bytes[0..]);
-const kernel_panic_allocator = kernel_panic_allocator_state.allocator();
-
-fn panicFunc(msg: []const u8, first_trace_addr: ?usize) noreturn {
-    var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
-
-    _ = console.writer().print("\rPANIC: {s} ({?x})\n", .{ msg, first_trace_addr }) catch unreachable;
-
-    if (first_trace_addr) |trace_addr| {
-        _ = console.writer().writeAll("Stack trace:\n") catch unreachable;
-
-        var it = std.debug.StackIterator.init(null, trace_addr);
-        while (it.next()) |addr| {
-            _ = console.writer().print("{x}\n", .{addr}) catch unreachable;
-        }
-    }
-
-    while (true) {}
-}
-
-pub fn logFn(
-    comptime message_level: std.log.Level,
-    comptime scope: @Type(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    const level_txt = comptime message_level.asText();
-    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
-
-    var console = std.io.multiWriter(.{ vga_console.writer(), com1.writer() });
-
-    _ = console.writer().print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
-}
-
-pub fn initMem(
-    reserved_physical_mem: *std.ArrayList(mem.Range),
-    reserved_virtual_mem: *std.ArrayList(mem.Map),
-) !void {
-    _ = reserved_physical_mem;
-
-    const vga_console_addr = mem.virtToPhys(@as(usize, @intFromPtr(vga_console.buffer().ptr)));
-    const vga_console_region = mem.Range{
-        .start = vga_console_addr,
-        .end = vga_console_addr + 32 * 1024,
-    };
-
-    try reserved_virtual_mem.append(.{
-        .physical = vga_console_region,
-        .virtual = .{
-            .start = mem.physToVirt(vga_console_region.start),
-            .end = mem.physToVirt(vga_console_region.end),
-        },
-    });
-}
-
-pub fn queryPageSize() usize {
-    // TODO: support runtime page size
-    return paging.PAGE_SIZE_4KB;
-}
-
-pub const page_size_min = paging.PAGE_SIZE_4KB;
-pub const page_size_max = paging.PAGE_SIZE_4KB;
-
-comptime {
-    _ = _start;
-    _ = multiboot;
-}
+pub const panic = pc.panic;
+pub const logFn = pc.logFn;
+pub const queryPageSize = pc.queryPageSize;
+pub const page_size_min = pc.page_size_min;
+pub const page_size_max = pc.page_size_max;

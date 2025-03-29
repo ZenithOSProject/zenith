@@ -1,6 +1,6 @@
 const std = @import("std");
-const pio = @import("port.zig");
-const mem = @import("../../../mem.zig");
+const pio = @import("../../../io/port.zig");
+const mem = @import("../../../../../mem.zig");
 const VgaConsole = @This();
 
 fg: std.io.tty.Color,

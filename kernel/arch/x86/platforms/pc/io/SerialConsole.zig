@@ -1,5 +1,5 @@
 const std = @import("std");
-const pio = @import("port.zig");
+const pio = @import("../../../io/port.zig");
 const SerialConsole = @This();
 
 pub const Port = enum(u16) {
